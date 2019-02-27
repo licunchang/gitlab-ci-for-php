@@ -1,0 +1,130 @@
+# 本ci配置都是基于 licunchang/php:7.2.13 镜像，该镜像基于 PHP 官方 php:7.2.13 镜像，添加
+#   1. composer
+#   2. phpcs
+#   3. phpcbf
+#   4. phpmd
+#   5. phpstan
+#   6. php-cs-fixer
+#   7. phan
+#   8. phpunit 8
+# 详细的内容见 https://github.com/licunchang/gitlab-ci-for-php/raw/master/dockerfiles/Dockerfile
+# 你也可以编写自己的镜像来满足更丰富的需求，目前 gitlab ci runner 只支持从 docker hub 上 pull 镜像
+image: licunchang/php:7.2.13
+
+# 随时关注，发现更多CI功能: https://github.com/licunchang/gitlab-ci-for-php/blob/master/README.md
+
+# 阶段
+#   1. build 阶段，主要执行语法检查、代码规范检查等
+#   2. test 阶段，主要执行单元测试等
+#   A. maintain 阶段，主要是执行 gitlab ci 的统计和配置文件更新操作
+stages:
+  - build
+  - maintain
+
+# PHP 语法检查
+php_syntax_check:
+  stage: build
+  script:
+    - find . -name \*.php -exec php -l "{}" \;
+  retry: 1
+
+# PHP 代码规范(PSR-2)
+php_coding_standards:psr-2:
+  stage: build
+  before_script:
+    - |
+      cat > phpcs.xml << EOF
+      <?xml version="1.0"?>
+      <ruleset xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="ZYB_PHP_CODING_STANDARDS" xsi:noNamespaceSchemaLocation="phpcs.xsd">
+          <description>Zuoyebang PHP Coding Standards(0.0.1).</description>
+
+          <!--
+              ignore vendor directly.
+          -->
+          <exclude-pattern type="relative">^/vendor/*</exclude-pattern>
+
+          <!-- DO NOT DELETE or MODIFY THE FOLLOWING LINE -->
+          <!--files-->
+
+          <arg value="sp"/>
+          <arg name="colors"/>
+          <arg name="parallel" value="75"/>
+
+          <!--只检查扩展名为php的文件-->
+          <arg name="extensions" value="php"/>
+          <arg name="tab-width" value="4"/>
+
+          <!--
+              reporting settings.
+          -->
+          <arg name="report-full"/>
+          <arg name="report-summary"/>
+          <arg name="report-width" value="120"/>
+
+          <!--
+              You can hard-code custom php.ini settings into your custom standard.
+              The following tag sets the memory limit to 128M.
+          -->
+          <ini name="memory_limit" value="128M"/>
+
+          <!--
+              https://www.php-fig.org/psr/psr-2/
+          -->
+          <rule ref="PSR2">
+            <exclude name="PSR1.Classes.ClassDeclaration.MissingNamespace"/>
+            <exclude name="Squiz.Classes.ValidClassName.NotCamelCaps"/>
+          </rule>
+      </ruleset>
+      EOF
+    # 下面的命令是对增量更新文件进行代码规范检查
+    - git diff-tree --no-commit-id --name-only -r --diff-filter=ACMRTUXB $(git log --format="%H" -n 1) | xargs -r -n1 -I '{}' sed -i '/<!--files-->/a \ \ \ \ <file>{}<\/file>' phpcs.xml
+    # 下面的命令是对全部文件进行代码规范检查(不推荐)
+    # - sed -i '/<!--files-->/a \ \ \ \ <arg name="basepath" value="."/>' phpcs.xml
+  script:
+    - cat phpcs.xml
+    - phpcs
+  retry: 0
+  allow_failure: true
+
+# PHP Static Code Analysis(太严格了，几乎没有通过的可能)
+# php_static_analysis:
+#   stage: build
+#   script:
+#     - phpmd $CI_PROJECT_DIR text codesize,unusedcode,naming,design,cleancode --suffixes php --exclude vendor
+#     - phpstan analyse --no-progress $CI_PROJECT_DIR
+#   retry: 0
+#   allow_failure: true
+
+# 统计信息
+ci_stat:
+  stage: maintain
+  when: always
+  script:
+    - GITLAB_CI_SECONDS=$(date +%s)
+    - |
+      cat <<EOF | curl --data-binary @- http://192.168.241.114:9091/metrics/job/gitlab-ci/namespace/${CI_PROJECT_NAMESPACE}/project/${CI_PROJECT_NAME}/user/${GITLAB_USER_LOGIN}/ref_name/${CI_COMMIT_REF_NAME}/version/19.2.13
+      # TYPE gitlab_ci_seconds gauge
+      gitlab_ci_seconds $GITLAB_CI_SECONDS
+      # TYPE gitlab_ci_job_id gauge
+      gitlab_ci_job_id $CI_JOB_ID
+      EOF
+  retry: 0
+  allow_failure: true
+
+# 持续集成配置文件更新检查
+ci_config_update:
+  stage: maintain
+  when: always
+  before_script:
+    - |
+      cat > update.tips << EOF
+
+        注意： 有一个更新版本的 .gitlab-ci.yml 文件可以下载使用，下载地址：
+        https://github.com/licunchang/gitlab-ci-for-php/raw/master/.gitlab-ci.yml
+
+      EOF
+  script:
+    - curl -L https://github.com/licunchang/gitlab-ci-for-php/raw/master/.gitlab-ci.yml -o .gitlab-ci.yml.online
+    - if [[ -n $(diff -q .gitlab-ci.yml.online .gitlab-ci.yml) ]]; then cat update.tips; exit 1; else exit 0; fi
+  retry: 0
+  allow_failure: true
