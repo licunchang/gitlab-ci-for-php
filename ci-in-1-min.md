@@ -15,7 +15,7 @@ curl -L https://github.com/licunchang/gitlab-ci-for-php/raw/master/.gitlab-ci.ym
 
 ## 2 提交 .gitlab-ci.yml 文件
 
-将 `.gitlab-ci.yml` 文件提交并 push 到 git.afpai.com。
+将 `.gitlab-ci.yml` 文件提交并 push 到 gitlab。
 
 ```
 git add .gitlab-ci.yml
@@ -23,9 +23,9 @@ git commit -m "add .gitlab-ci.yml file"
 git push
 ```
 
-## 3 登录 git.afpai.com 查看集成报告
+## 3 登录 gitlab 查看集成报告
 
-登录 git.afpai.com，选择刚刚提交了 .gitlab-ci.yml 文件的 project，点击左侧菜单栏 `CI/CD` -> `Pipelines`，就能看到这次集成的状态了。
+登录 gitlab，选择刚刚提交了 .gitlab-ci.yml 文件的 project，点击左侧菜单栏 `CI/CD` -> `Pipelines`，就能看到这次集成的状态了。
 
 
 
